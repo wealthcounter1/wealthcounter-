@@ -3,1005 +3,147 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Interactive Stock Screener Dashboard (Plotly)</title>
+  <title>Stock Screener Dashboard</title>
 
-  <!-- Tailwind (for styling) -->
   <script src="https://cdn.tailwindcss.com"></script>
-
-  <!-- Plotly -->
   <script src="https://cdn.plot.ly/plotly-2.30.0.min.js"></script>
-
-  <!-- SheetJS (Excel parser) -->
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 
   <style>
-    /* Small polish beyond Tailwind */
-    .card { border: 1px solid rgba(148,163,184,.35); }
-    .shadow-soft { box-shadow: 0 8px 30px rgba(2,6,23,.08); }
-    .chip { border: 1px solid rgba(148,163,184,.35); }
+    .card { border: 1px solid rgba(203,213,225,.9); }
+    .shadow-soft { box-shadow: 0 6px 24px rgba(15,23,42,.08); }
+    .chip { border: 1px solid rgba(203,213,225,.9); }
     .plot { height: 420px; }
     @media (max-width: 1024px) { .plot { height: 360px; } }
     @media (max-width: 640px)  { .plot { height: 320px; } }
     .returns-grid { display:grid; grid-template-columns: repeat(6, minmax(0,1fr)); gap:.5rem; }
     @media (max-width: 1024px) { .returns-grid { grid-template-columns: repeat(3, minmax(0,1fr)); } }
-    .tile { border-radius: 0.75rem; padding: 0.75rem; border: 1px solid rgba(148,163,184,.35); }
+    .tile { border-radius: 0.75rem; padding: 0.75rem; border: 1px solid rgba(203,213,225,.9); }
   </style>
 </head>
 
-<body class="bg-slate-950 text-slate-100">
-  <div class="max-w-7xl mx-auto px-4 py-6">
-    <!-- Header -->
-    <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-      <div>
-        <h1 class="text-2xl lg:text-3xl font-bold tracking-tight">Stock Screener Dashboard</h1>
-        <p class="text-slate-300 mt-1">
-          Read-only dashboard (viewer mode). Data is updated by the admin and loaded automatically.
-        </p>
-      </div>
+<body class="bg-white text-slate-800">
 
-      <div class="flex flex-col sm:flex-row gap-2 sm:items-center">
-        <div class="px-4 py-2 rounded-xl bg-slate-900 card shadow-soft text-sm font-semibold">Last updated: <span id="lastUpdated" class="text-slate-300 font-normal">—</span></div>
-        <button id="resetBtn" class="px-4 py-2 rounded-xl bg-slate-900 card shadow-soft hover:bg-slate-800 transition text-sm font-semibold">
-          Reset filters
-        </button>
-      </div>
+<div class="max-w-7xl mx-auto px-4 py-6">
+
+  <div class="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+    <div>
+      <h1 class="text-3xl font-semibold">Stock Screener Dashboard</h1>
+      <p class="text-slate-600 mt-1">
+        Read only dashboard. Data is refreshed automatically.
+      </p>
     </div>
 
-    <!-- Status -->
-    <div id="status" class="mt-4 text-sm text-slate-300"></div>
-
-    <!-- Tabs -->
-    <div class="mt-6 flex flex-wrap gap-2">
-      <button data-tab="overview" class="tabBtn px-4 py-2 rounded-xl bg-slate-100 text-slate-900 font-semibold">Overview</button>
-      <button data-tab="screener" class="tabBtn px-4 py-2 rounded-xl bg-slate-900 card font-semibold hover:bg-slate-800">Screener</button>
-      <button data-tab="company" class="tabBtn px-4 py-2 rounded-xl bg-slate-900 card font-semibold hover:bg-slate-800">Company</button>
-    </div>
-
-    <!-- Global Filters -->
-    <div class="mt-4 bg-slate-900 card rounded-2xl p-4 shadow-soft">
-      <div class="flex items-center justify-between gap-3 flex-wrap">
-        <div class="flex items-center gap-2 flex-wrap">
-          <span class="text-sm font-semibold text-slate-200">Filters</span>
-          <span id="countChip" class="chip px-3 py-1 rounded-full text-xs text-slate-200 bg-slate-950">0 companies</span>
-        </div>
-
-        <div class="flex items-center gap-2 flex-wrap">
-          <select id="industrySelect" class="bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none">
-            <option value="__ALL__">All industries</option>
-          </select>
-
-          <select id="sortSelect" class="bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none">
-            <option value="Market Capitalization">Sort: Market Cap</option>
-            <option value="Return over 1year">Sort: Return 1Y</option>
-            <option value="Return over 6months">Sort: Return 6M</option>
-            <option value="Price to Earning">Sort: P/E</option>
-            <option value="Return on equity">Sort: ROE</option>
-            <option value="Return on capital employed">Sort: ROCE</option>
-            <option value="OPM">Sort: OPM</option>
-          </select>
-
-          <select id="returnMetricSelect" class="bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none">
-            <option value="Return over 1day">Return tiles: 1D</option>
-            <option value="Return over 1week">Return tiles: 1W</option>
-            <option value="Return over 1month">Return tiles: 1M</option>
-            <option value="Return over 3months">Return tiles: 3M</option>
-            <option value="Return over 6months">Return tiles: 6M</option>
-            <option value="Return over 1year" selected>Return tiles: 1Y</option>
-          </select>
-        </div>
+    <div class="flex gap-2">
+      <div class="px-4 py-2 rounded-xl bg-slate-50 card shadow-soft text-sm">
+        Last updated: <span id="lastUpdated">—</span>
       </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-6 gap-3 mt-4">
-        <div class="lg:col-span-2">
-          <label class="text-xs text-slate-300">Market Cap (min)</label>
-          <input id="mcMin" type="number" class="mt-1 w-full bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none" placeholder="e.g., 0">
-        </div>
-        <div class="lg:col-span-2">
-          <label class="text-xs text-slate-300">Market Cap (max)</label>
-          <input id="mcMax" type="number" class="mt-1 w-full bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none" placeholder="e.g., 500000">
-        </div>
-        <div class="lg:col-span-1">
-          <label class="text-xs text-slate-300">P/E (max)</label>
-          <input id="peMax" type="number" class="mt-1 w-full bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none" placeholder="e.g., 40">
-        </div>
-        <div class="lg:col-span-1">
-          <label class="text-xs text-slate-300">Debt/Equity (max)</label>
-          <input id="deMax" type="number" class="mt-1 w-full bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none" placeholder="e.g., 2">
-        </div>
-
-        <div class="lg:col-span-2">
-          <label class="text-xs text-slate-300">ROE (min)</label>
-          <input id="roeMin" type="number" class="mt-1 w-full bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none" placeholder="e.g., 10">
-        </div>
-        <div class="lg:col-span-2">
-          <label class="text-xs text-slate-300">ROCE (min)</label>
-          <input id="roceMin" type="number" class="mt-1 w-full bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none" placeholder="e.g., 12">
-        </div>
-        <div class="lg:col-span-2">
-          <label class="text-xs text-slate-300">1Y Return (min)</label>
-          <input id="r1yMin" type="number" class="mt-1 w-full bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none" placeholder="e.g., 0">
-        </div>
-      </div>
-
-      <div class="mt-4 flex items-center gap-3 flex-wrap">
-        <label class="inline-flex items-center gap-2 text-sm">
-          <input id="excludeMissing" type="checkbox" class="accent-slate-200">
-          Exclude rows with missing key ratios (P/E, ROE, ROCE)
-        </label>
-        <label class="inline-flex items-center gap-2 text-sm">
-          <input id="onlyPositive" type="checkbox" class="accent-slate-200">
-          Only positive 1Y return
-        </label>
-        <label class="inline-flex items-center gap-2 text-sm">
-          <input id="hideOutliers" type="checkbox" class="accent-slate-200">
-          Hide extreme return outliers (winsorize charts)
-        </label>
-      </div>
-    </div>
-
-    <!-- ============ OVERVIEW TAB ============ -->
-    <section id="tab-overview" class="tabSection mt-6">
-      <div class="grid grid-cols-1 lg:grid-cols-4 gap-3">
-        <div class="bg-slate-900 card rounded-2xl p-4 shadow-soft">
-          <div class="text-xs text-slate-300">Companies (filtered)</div>
-          <div id="kpiCompanies" class="mt-2 text-2xl font-bold">—</div>
-        </div>
-        <div class="bg-slate-900 card rounded-2xl p-4 shadow-soft">
-          <div class="text-xs text-slate-300">Total Market Cap</div>
-          <div id="kpiMarketCap" class="mt-2 text-2xl font-bold">—</div>
-        </div>
-        <div class="bg-slate-900 card rounded-2xl p-4 shadow-soft">
-          <div class="text-xs text-slate-300">Median P/E</div>
-          <div id="kpiPE" class="mt-2 text-2xl font-bold">—</div>
-        </div>
-        <div class="bg-slate-900 card rounded-2xl p-4 shadow-soft">
-          <div class="text-xs text-slate-300">Median ROE / ROCE</div>
-          <div id="kpiROE" class="mt-2 text-2xl font-bold">—</div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
-        <div class="bg-slate-900 card rounded-2xl p-3 shadow-soft">
-          <div class="text-sm font-semibold px-2 py-1">Market Cap by Industry (Top 15)</div>
-          <div id="plotMcIndustry" class="plot"></div>
-        </div>
-        <div class="bg-slate-900 card rounded-2xl p-3 shadow-soft">
-          <div class="text-sm font-semibold px-2 py-1">Median 1Y Return by Industry (Top 15)</div>
-          <div id="plotRIndustry" class="plot"></div>
-        </div>
-      </div>
-
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
-        <div class="bg-slate-900 card rounded-2xl p-3 shadow-soft">
-          <div class="text-sm font-semibold px-2 py-1">Valuation vs Quality (P/E vs ROE)</div>
-          <div id="plotScatter" class="plot"></div>
-        </div>
-        <div class="bg-slate-900 card rounded-2xl p-3 shadow-soft">
-          <div class="text-sm font-semibold px-2 py-1">1Y Return Distribution</div>
-          <div id="plotHist" class="plot"></div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ SCREENER TAB ============ -->
-    <section id="tab-screener" class="tabSection mt-6 hidden">
-      <div class="bg-slate-900 card rounded-2xl p-4 shadow-soft">
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-          <div>
-            <div class="text-lg font-bold">Top Picks (click a row to open Company view)</div>
-            <div class="text-sm text-slate-300">This table responds to the filters above.</div>
-          </div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <label class="text-xs text-slate-300">Rows</label>
-            <select id="rowsSelect" class="bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none">
-              <option>25</option>
-              <option selected>50</option>
-              <option>100</option>
-              <option>200</option>
-            </select>
-          </div>
-        </div>
-
-        <div id="tableWrap" class="mt-4 overflow-auto rounded-2xl border border-slate-800">
-          <table class="min-w-full text-sm">
-            <thead class="bg-slate-950 sticky top-0">
-              <tr class="text-left text-slate-200">
-                <th class="p-3">Name</th>
-                <th class="p-3">Industry</th>
-                <th class="p-3 text-right">Mkt Cap</th>
-                <th class="p-3 text-right">P/E</th>
-                <th class="p-3 text-right">ROE</th>
-                <th class="p-3 text-right">ROCE</th>
-                <th class="p-3 text-right">OPM</th>
-                <th class="p-3 text-right">1Y</th>
-                <th class="p-3 text-right">6M</th>
-              </tr>
-            </thead>
-            <tbody id="tableBody" class="divide-y divide-slate-800"></tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- ============ COMPANY TAB ============ -->
-    <section id="tab-company" class="tabSection mt-6 hidden">
-      <div class="bg-slate-900 card rounded-2xl p-4 shadow-soft">
-        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-          <div>
-            <div id="companyTitle" class="text-xl font-bold">Select a company</div>
-            <div id="companySubtitle" class="text-sm text-slate-300">Use the dropdown or click a row in the Screener table.</div>
-          </div>
-          <div class="flex items-center gap-2 flex-wrap">
-            <label class="text-xs text-slate-300">Company</label>
-            <select id="companySelect" class="bg-slate-950 card rounded-xl px-3 py-2 text-sm outline-none min-w-[18rem]">
-              <option value="">—</option>
-            </select>
-          </div>
-        </div>
-
-        <!-- KPI strip -->
-        <div class="grid grid-cols-2 lg:grid-cols-6 gap-3 mt-4">
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-xs text-slate-400">Market Cap</div>
-            <div id="c_mc" class="text-lg font-bold mt-1">—</div>
-          </div>
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-xs text-slate-400">P/E</div>
-            <div id="c_pe" class="text-lg font-bold mt-1">—</div>
-          </div>
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-xs text-slate-400">EPS (TTM est.)</div>
-            <div id="c_eps" class="text-lg font-bold mt-1">—</div>
-          </div>
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-xs text-slate-400">ROE</div>
-            <div id="c_roe" class="text-lg font-bold mt-1">—</div>
-          </div>
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-xs text-slate-400">ROCE</div>
-            <div id="c_roce" class="text-lg font-bold mt-1">—</div>
-          </div>
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-xs text-slate-400">PEG</div>
-            <div id="c_peg" class="text-lg font-bold mt-1">—</div>
-          </div>
-        </div>
-
-        <!-- Returns tiles -->
-        <div class="mt-4">
-          <div class="text-sm font-semibold text-slate-200 mb-2">Stock Returns (%)</div>
-          <div class="returns-grid" id="returnsTiles"></div>
-        </div>
-
-        <!-- Charts -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-4">
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-sm font-semibold px-2 py-1">Operating Revenue (Quarterly)</div>
-            <div id="plotSales" class="plot"></div>
-          </div>
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-sm font-semibold px-2 py-1">Operating Profit & Margin</div>
-            <div id="plotOpProfit" class="plot"></div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-sm font-semibold px-2 py-1">Net Profit (Quarterly)</div>
-            <div id="plotNetProfit" class="plot"></div>
-          </div>
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-sm font-semibold px-2 py-1">Stock Price Snapshot</div>
-            <div id="plotPrice" class="plot"></div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-sm font-semibold px-2 py-1">Shares Holding</div>
-            <div id="plotHoldings" class="plot"></div>
-          </div>
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-sm font-semibold px-2 py-1">EPS (Quarterly, computed)</div>
-            <div id="plotEPS" class="plot"></div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
-          <div class="bg-slate-950 card rounded-2xl p-3">
-            <div class="text-sm font-semibold px-2 py-1">Yearly P&L (TTM vs FY)</div>
-            <div id="plotYearly" class="plot"></div>
-          </div>
-          <div class="bg-slate-950 card rounded-2xl p-4">
-            <div class="text-sm font-semibold text-slate-200 mb-3">Quick Fundamentals</div>
-            <div class="grid grid-cols-2 gap-3 text-sm">
-              <div class="bg-slate-900 card rounded-xl p-3"><div class="text-xs text-slate-400">Debt/Equity</div><div id="c_de" class="font-bold mt-1">—</div></div>
-              <div class="bg-slate-900 card rounded-xl p-3"><div class="text-xs text-slate-400">Pledged %</div><div id="c_pledge" class="font-bold mt-1">—</div></div>
-              <div class="bg-slate-900 card rounded-xl p-3"><div class="text-xs text-slate-400">Dividend Yield</div><div id="c_dy" class="font-bold mt-1">—</div></div>
-              <div class="bg-slate-900 card rounded-xl p-3"><div class="text-xs text-slate-400">MarketCap/Sales</div><div id="c_mcs" class="font-bold mt-1">—</div></div>
-              <div class="bg-slate-900 card rounded-xl p-3"><div class="text-xs text-slate-400">Current Ratio</div><div id="c_cr" class="font-bold mt-1">—</div></div>
-              <div class="bg-slate-900 card rounded-xl p-3"><div class="text-xs text-slate-400">Quick Ratio</div><div id="c_qr" class="font-bold mt-1">—</div></div>
-              <div class="bg-slate-900 card rounded-xl p-3"><div class="text-xs text-slate-400">Cash Equivalents</div><div id="c_cash" class="font-bold mt-1">—</div></div>
-              <div class="bg-slate-900 card rounded-xl p-3"><div class="text-xs text-slate-400">Is SME</div><div id="c_sme" class="font-bold mt-1">—</div></div>
-            </div>
-          </div>
-        </div>
-
-      </div>
-    </section>
-
-    <div class="mt-10 text-xs text-slate-400">
-      <p><span class="font-semibold text-slate-300">Note:</span> If you need an offline version (no CDNs), tell me and I’ll package Plotly + SheetJS locally.</p>
+      <button id="resetBtn" class="px-4 py-2 rounded-xl bg-slate-50 card shadow-soft hover:bg-slate-100 text-sm">
+        Reset filters
+      </button>
     </div>
   </div>
 
-<script>
-/* =========================
-   STATE
-========================= */
-let rawRows = [];
-let rows = [];
-let filteredRows = [];
-let companyByName = new Map();
-let currentCompany = null;
+  <div id="status" class="mt-4 text-sm text-slate-600"></div>
 
-const KEY_DROP = new Set(["BSE Code", "NSE Code", "SE Code"]); // we'll drop these if present
+  <div class="mt-6 flex flex-wrap gap-2">
+    <button data-tab="overview" class="tabBtn px-4 py-2 rounded-xl bg-slate-900 text-white">Overview</button>
+    <button data-tab="screener" class="tabBtn px-4 py-2 rounded-xl bg-slate-100 card">Screener</button>
+    <button data-tab="company" class="tabBtn px-4 py-2 rounded-xl bg-slate-100 card">Company</button>
+  </div>
 
-const RETURN_FIELDS = [
-  "Return over 1day",
-  "Return over 1week",
-  "Return over 1month",
-  "Return over 3months",
-  "Return over 6months",
-  "Return over 1year"
-];
-
-const NUM_FIELDS = [
-  "Current Price","High price all time","High price","Low price",
-  "Market Capitalization","Price to Earning","Market Cap to Sales","OPM",
-  "Return on equity","PEG Ratio","Debt to equity","Capital work in progress",
-  "Return on capital employed","Dividend yield","Current ratio","Quick ratio",
-  "Promoter holding","DII holding","FII holding","Public holding","Pledged percentage",
-  "Cash Equivalents","Cash from operations last year","Cash from operations preceding year",
-  "Sales latest quarter","Sales preceding quarter","Sales 2quarters back","Sales 3quarters back","Sales preceding year quarter",
-  "Sales preceding year","Sales preceding 12months",
-  "Operating profit latest quarter","Operating profit preceding quarter","Operating profit 2quarters back","Operating profit 3quarters back","Operating profit preceding year quarter",
-  "Operating profit last year","Operating profit preceding year",
-  "Net Profit latest quarter","Net Profit preceding quarter","Net profit 2quarters back","Net profit 3quarters back","Net Profit preceding year quarter",
-  "Net Profit last year","Net Profit preceding year",
-  "Number of equity shares"
-].concat(RETURN_FIELDS);
-
-/* =========================
-   HELPERS
-========================= */
-function toNum(v){
-  if(v === null || v === undefined) return null;
-  if(typeof v === "number") return Number.isFinite(v) ? v : null;
-  if(typeof v === "boolean") return v ? 1 : 0;
-  const s = String(v).trim();
-  if(s === "" || s === "-" ) return null;
-  // Handle percent strings
-  const cleaned = s.replace(/,/g,"").replace(/%/g,"");
-  const n = parseFloat(cleaned);
-  return Number.isFinite(n) ? n : null;
-}
-
-function fmtNum(n, digits=0){
-  if(n === null || n === undefined || !Number.isFinite(n)) return "—";
-  return n.toLocaleString(undefined, {maximumFractionDigits: digits, minimumFractionDigits: digits});
-}
-
-function fmtPct(n, digits=1){
-  if(n === null || n === undefined || !Number.isFinite(n)) return "—";
-  return fmtNum(n, digits) + "%";
-}
-
-function median(arr){
-  const a = arr.filter(x => Number.isFinite(x)).sort((x,y)=>x-y);
-  if(a.length===0) return null;
-  const m = Math.floor(a.length/2);
-  return a.length%2? a[m] : (a[m-1]+a[m])/2;
-}
-
-function clampWinsorize(values, pLow=0.01, pHigh=0.99){
-  const v = values.filter(x=>Number.isFinite(x)).sort((a,b)=>a-b);
-  if(v.length<10) return {low:null, high:null};
-  const lo = v[Math.floor((v.length-1)*pLow)];
-  const hi = v[Math.floor((v.length-1)*pHigh)];
-  return {low:lo, high:hi};
-}
-
-function setStatus(msg){
-  document.getElementById("status").textContent = msg;
-}
-
-/* =========================
-   LOAD + NORMALIZE
-========================= */
-async function readFile(file){
-  setStatus("Reading file…");
-  const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, {type:"array"});
-  const sheetName = wb.SheetNames[0];
-  const ws = wb.Sheets[sheetName];
-  // Keep blanks as null so we can distinguish missing from zero
-  rawRows = XLSX.utils.sheet_to_json(ws, {defval: null, raw: true});
-  normalizeRows();
-  bootstrapUI();
-  applyFiltersAndRender();
-  setStatus("Loaded " + rows.length.toLocaleString() + " rows from sheet: " + sheetName);
-}
-
-function normalizeRows(){
-  rows = rawRows.map(r => {
-    const out = {};
-    // Copy all fields, drop unwanted codes
-    for(const [k,v] of Object.entries(r)){
-      const key = String(k).trim();
-      if(KEY_DROP.has(key)) continue;
-      out[key] = v;
-    }
-    // Ensure required text fields
-    out["Name"] = (out["Name"] ?? "").toString().trim();
-    out["Industry"] = (out["Industry"] ?? "").toString().trim() || "Unknown";
-    // Normalize numeric fields
-    for(const f of NUM_FIELDS){
-      if(out.hasOwnProperty(f)) out[f] = toNum(out[f]);
-    }
-    // Compute EPS series + TTM
-    const shares = out["Number of equity shares"];
-    const qNP = [
-      out["Net Profit preceding year quarter"],
-      out["Net profit 3quarters back"],
-      out["Net profit 2quarters back"],
-      out["Net Profit preceding quarter"],
-      out["Net Profit latest quarter"]
-    ];
-    out["_EPS_Q"] = qNP.map(np => (Number.isFinite(np) && Number.isFinite(shares) && shares!==0) ? (np / shares) : null);
-    out["_NP_TTM"] = qNP.slice(1).reduce((a,b)=>a+(Number.isFinite(b)?b:0), 0); // last 4 quarters (excluding YoY quarter)
-    out["_EPS_TTM"] = (Number.isFinite(out["_NP_TTM"]) && Number.isFinite(shares) && shares!==0) ? (out["_NP_TTM"]/shares) : null;
-
-    // QoQ & YoY growth
-    const sales_latest = out["Sales latest quarter"], sales_prev = out["Sales preceding quarter"], sales_yoy = out["Sales preceding year quarter"];
-    out["_Sales_QoQ"] = (Number.isFinite(sales_latest) && Number.isFinite(sales_prev) && sales_prev!==0) ? (100*(sales_latest/sales_prev - 1)) : null;
-    out["_Sales_YoY"] = (Number.isFinite(sales_latest) && Number.isFinite(sales_yoy) && sales_yoy!==0) ? (100*(sales_latest/sales_yoy - 1)) : null;
-
-    const op_latest = out["Operating profit latest quarter"], op_prev = out["Operating profit preceding quarter"], op_yoy = out["Operating profit preceding year quarter"];
-    out["_OP_QoQ"] = (Number.isFinite(op_latest) && Number.isFinite(op_prev) && op_prev!==0) ? (100*(op_latest/op_prev - 1)) : null;
-    out["_OP_YoY"] = (Number.isFinite(op_latest) && Number.isFinite(op_yoy) && op_yoy!==0) ? (100*(op_latest/op_yoy - 1)) : null;
-
-    const np_latest = out["Net Profit latest quarter"], np_prev = out["Net Profit preceding quarter"], np_yoy = out["Net Profit preceding year quarter"];
-    out["_NP_QoQ"] = (Number.isFinite(np_latest) && Number.isFinite(np_prev) && np_prev!==0) ? (100*(np_latest/np_prev - 1)) : null;
-    out["_NP_YoY"] = (Number.isFinite(np_latest) && Number.isFinite(np_yoy) && np_yoy!==0) ? (100*(np_latest/np_yoy - 1)) : null;
-
-    // Margin series for OP chart
-    const sales_series = [
-      out["Sales preceding year quarter"],
-      out["Sales 3quarters back"],
-      out["Sales 2quarters back"],
-      out["Sales preceding quarter"],
-      out["Sales latest quarter"]
-    ];
-    const op_series = [
-      out["Operating profit preceding year quarter"],
-      out["Operating profit 3quarters back"],
-      out["Operating profit 2quarters back"],
-      out["Operating profit preceding quarter"],
-      out["Operating profit latest quarter"]
-    ];
-    out["_OPM_Q"] = sales_series.map((s,i)=>{
-      const op = op_series[i];
-      return (Number.isFinite(s) && Number.isFinite(op) && s!==0) ? (100*op/s) : null;
-    });
-
-    return out;
-  });
-
-  // Index by name
-  companyByName = new Map();
-  for(const r of rows){
-    if(r["Name"]) companyByName.set(r["Name"], r);
-  }
-}
-
-/* =========================
-   UI INIT
-========================= */
-function bootstrapUI(){
-  // Industry options
-  const industries = Array.from(new Set(rows.map(r=>r["Industry"]))).sort((a,b)=>a.localeCompare(b));
-  const indSel = document.getElementById("industrySelect");
-  indSel.innerHTML = `<option value="__ALL__">All industries</option>` + industries.map(x=>`<option>${escapeHtml(x)}</option>`).join("");
-
-  // Company options
-  const companySel = document.getElementById("companySelect");
-  const names = Array.from(companyByName.keys()).sort((a,b)=>a.localeCompare(b));
-  companySel.innerHTML = `<option value="">—</option>` + names.map(n=>`<option>${escapeHtml(n)}</option>`).join("");
-
-  // Wire events
-  const ids = ["industrySelect","mcMin","mcMax","peMax","deMax","roeMin","roceMin","r1yMin","excludeMissing","onlyPositive","hideOutliers","sortSelect","rowsSelect","returnMetricSelect"];
-  ids.forEach(id => document.getElementById(id).addEventListener("change", applyFiltersAndRender));
-  ["mcMin","mcMax","peMax","deMax","roeMin","roceMin","r1yMin"].forEach(id => document.getElementById(id).addEventListener("input", debounce(applyFiltersAndRender, 250)));
-
-  companySel.addEventListener("change", ()=>{
-    const name = companySel.value;
-    if(!name){ currentCompany = null; renderCompany(); return; }
-    currentCompany = companyByName.get(name) || null;
-    switchTab("company");
-    renderCompany();
-  });
-
-  document.getElementById("resetBtn").addEventListener("click", ()=>{
-    indSel.value="__ALL__";
-    ["mcMin","mcMax","peMax","deMax","roeMin","roceMin","r1yMin"].forEach(id=>document.getElementById(id).value="");
-    document.getElementById("excludeMissing").checked=false;
-    document.getElementById("onlyPositive").checked=false;
-    document.getElementById("hideOutliers").checked=false;
-    document.getElementById("sortSelect").value="Market Capitalization";
-    document.getElementById("rowsSelect").value="50";
-    document.getElementById("returnMetricSelect").value="Return over 1year";
-    applyFiltersAndRender();
-  });
-
-  // Tabs
-  document.querySelectorAll(".tabBtn").forEach(btn=>{
-    btn.addEventListener("click", ()=>switchTab(btn.dataset.tab));
-  });
-}
-
-function escapeHtml(str){
-  return String(str)
-    .replaceAll("&","&amp;")
-    .replaceAll("<","&lt;")
-    .replaceAll(">","&gt;")
-    .replaceAll('"',"&quot;")
-    .replaceAll("'","&#039;");
-}
-
-function debounce(fn, ms){
-  let t;
-  return (...args)=>{
-    clearTimeout(t);
-    t=setTimeout(()=>fn(...args), ms);
-  };
-}
-
-/* =========================
-   FILTERING
-========================= */
-function applyFilters(){
-  const ind = document.getElementById("industrySelect").value;
-  const mcMin = toNum(document.getElementById("mcMin").value);
-  const mcMax = toNum(document.getElementById("mcMax").value);
-  const peMax = toNum(document.getElementById("peMax").value);
-  const deMax = toNum(document.getElementById("deMax").value);
-  const roeMin = toNum(document.getElementById("roeMin").value);
-  const roceMin = toNum(document.getElementById("roceMin").value);
-  const r1yMin = toNum(document.getElementById("r1yMin").value);
-  const excludeMissing = document.getElementById("excludeMissing").checked;
-  const onlyPositive = document.getElementById("onlyPositive").checked;
-
-  filteredRows = rows.filter(r=>{
-    if(ind !== "__ALL__" && r["Industry"] !== ind) return false;
-
-    const mc = r["Market Capitalization"];
-    if(Number.isFinite(mcMin) && (!Number.isFinite(mc) || mc < mcMin)) return false;
-    if(Number.isFinite(mcMax) && (Number.isFinite(mc) && mc > mcMax)) return false;
-
-    const pe = r["Price to Earning"];
-    if(Number.isFinite(peMax) && (Number.isFinite(pe) && pe > peMax)) return false;
-
-    const de = r["Debt to equity"];
-    if(Number.isFinite(deMax) && (Number.isFinite(de) && de > deMax)) return false;
-
-    const roe = r["Return on equity"];
-    if(Number.isFinite(roeMin) && (!Number.isFinite(roe) || roe < roeMin)) return false;
-
-    const roce = r["Return on capital employed"];
-    if(Number.isFinite(roceMin) && (!Number.isFinite(roce) || roce < roceMin)) return false;
-
-    const r1y = r["Return over 1year"];
-    if(Number.isFinite(r1yMin) && (!Number.isFinite(r1y) || r1y < r1yMin)) return false;
-    if(onlyPositive && (!Number.isFinite(r1y) || r1y <= 0)) return false;
-
-    if(excludeMissing){
-      if(!Number.isFinite(pe) || !Number.isFinite(roe) || !Number.isFinite(roce)) return false;
-    }
-
-    return true;
-  });
-
-  document.getElementById("countChip").textContent = filteredRows.length.toLocaleString() + " companies";
-}
-
-/* =========================
-   RENDER
-========================= */
-function applyFiltersAndRender(){
-  if(rows.length===0){ setStatus("Upload an Excel file to begin."); return; }
-  applyFilters();
-  renderOverview();
-  renderScreener();
-  // Keep company if still exists under current filter; if not, still show profile but warn
-  renderCompany();
-}
-
-function renderOverview(){
-  const n = filteredRows.length;
-  document.getElementById("kpiCompanies").textContent = n.toLocaleString();
-
-  const totalMc = filteredRows.reduce((a,r)=>a+(Number.isFinite(r["Market Capitalization"])?r["Market Capitalization"]:0), 0);
-  document.getElementById("kpiMarketCap").textContent = fmtNum(totalMc, 0);
-
-  document.getElementById("kpiPE").textContent = fmtNum(median(filteredRows.map(r=>r["Price to Earning"])), 1);
-
-  const mRoe = median(filteredRows.map(r=>r["Return on equity"]));
-  const mRoce = median(filteredRows.map(r=>r["Return on capital employed"]));
-  document.getElementById("kpiROE").textContent = `${fmtNum(mRoe,1)} / ${fmtNum(mRoce,1)}`;
-
-  // Market cap by industry
-  const mcBy = new Map();
-  for(const r of filteredRows){
-    const k=r["Industry"];
-    const v=r["Market Capitalization"];
-    if(!Number.isFinite(v)) continue;
-    mcBy.set(k, (mcBy.get(k)||0)+v);
-  }
-  const mcSorted = Array.from(mcBy.entries()).sort((a,b)=>b[1]-a[1]).slice(0,15);
-  Plotly.newPlot("plotMcIndustry", [{
-    type:"bar",
-    x: mcSorted.map(x=>x[0]),
-    y: mcSorted.map(x=>x[1]),
-    hovertemplate:"%{x}<br>Market Cap: %{y:,}<extra></extra>"
-  }], baseLayout(""), {displayModeBar:false, responsive:true});
-
-  // Median return by industry
-  const rBy = new Map();
-  for(const r of filteredRows){
-    const k=r["Industry"];
-    const v=r["Return over 1year"];
-    if(!rBy.has(k)) rBy.set(k, []);
-    if(Number.isFinite(v)) rBy.get(k).push(v);
-  }
-  const rMed = Array.from(rBy.entries()).map(([k,arr])=>[k, median(arr)]).filter(x=>Number.isFinite(x[1]));
-  rMed.sort((a,b)=>b[1]-a[1]);
-  const top = rMed.slice(0,15);
-  Plotly.newPlot("plotRIndustry", [{
-    type:"bar",
-    x: top.map(x=>x[0]),
-    y: top.map(x=>x[1]),
-    hovertemplate:"%{x}<br>Median 1Y: %{y:.1f}%<extra></extra>"
-  }], baseLayout(""), {displayModeBar:false, responsive:true});
-
-  // Scatter PE vs ROE (sample for speed)
-  let scatter = filteredRows.filter(r=>Number.isFinite(r["Price to Earning"]) && Number.isFinite(r["Return on equity"]) && Number.isFinite(r["Market Capitalization"]));
-  scatter.sort((a,b)=>b["Market Capitalization"]-a["Market Capitalization"]);
-  scatter = scatter.slice(0, 1200);
-
-  Plotly.newPlot("plotScatter", [{
-    type:"scattergl",
-    mode:"markers",
-    x: scatter.map(r=>r["Price to Earning"]),
-    y: scatter.map(r=>r["Return on equity"]),
-    text: scatter.map(r=>r["Name"]),
-    customdata: scatter.map(r=>r["Name"]),
-    marker: { size: scatter.map(r=>Math.max(6, Math.min(40, Math.log10(r["Market Capitalization"]+1)*6))), opacity:0.75 },
-    hovertemplate:"%{text}<br>P/E: %{x:.1f}<br>ROE: %{y:.1f}%<extra></extra>"
-  }], baseLayout("P/E"), {displayModeBar:false, responsive:true})
-  .then(gd=>{
-    gd.on("plotly_click", ev=>{
-      if(!ev.points?.length) return;
-      const name = ev.points[0].customdata;
-      if(companyByName.has(name)){
-        currentCompany = companyByName.get(name);
-        document.getElementById("companySelect").value = name;
-        switchTab("company");
-        renderCompany();
-      }
-    });
-  });
-
-  // Histogram 1Y returns (with optional winsorize)
-  const hideOutliers = document.getElementById("hideOutliers").checked;
-  let vals = filteredRows.map(r=>r["Return over 1year"]).filter(Number.isFinite);
-  if(hideOutliers){
-    const {low, high} = clampWinsorize(vals, 0.01, 0.99);
-    if(Number.isFinite(low) && Number.isFinite(high)){
-      vals = vals.filter(v=>v>=low && v<=high);
-    }
-  }
-  Plotly.newPlot("plotHist", [{
-    type:"histogram",
-    x: vals,
-    nbinsx: 40,
-    hovertemplate:"Return: %{x:.1f}%<br>Count: %{y}<extra></extra>"
-  }], baseLayout("1Y Return (%)"), {displayModeBar:false, responsive:true});
-}
-
-function renderScreener(){
-  const sortKey = document.getElementById("sortSelect").value;
-  const nRows = parseInt(document.getElementById("rowsSelect").value, 10);
-
-  let arr = filteredRows.slice();
-  arr.sort((a,b)=>{
-    const av=a[sortKey], bv=b[sortKey];
-    if(!Number.isFinite(av) && !Number.isFinite(bv)) return 0;
-    if(!Number.isFinite(av)) return 1;
-    if(!Number.isFinite(bv)) return -1;
-    // Desc by default except P/E
-    if(sortKey==="Price to Earning") return av-bv;
-    return bv-av;
-  });
-
-  arr = arr.slice(0, nRows);
-
-  const tbody = document.getElementById("tableBody");
-  tbody.innerHTML = arr.map(r=>{
-    const nm = escapeHtml(r["Name"]);
-    return `
-      <tr class="hover:bg-slate-950 cursor-pointer" data-name="${nm}">
-        <td class="p-3 font-semibold">${nm}</td>
-        <td class="p-3 text-slate-300">${escapeHtml(r["Industry"])}</td>
-        <td class="p-3 text-right">${fmtNum(r["Market Capitalization"],0)}</td>
-        <td class="p-3 text-right">${fmtNum(r["Price to Earning"],1)}</td>
-        <td class="p-3 text-right">${fmtNum(r["Return on equity"],1)}</td>
-        <td class="p-3 text-right">${fmtNum(r["Return on capital employed"],1)}</td>
-        <td class="p-3 text-right">${fmtNum(r["OPM"],1)}</td>
-        <td class="p-3 text-right">${fmtNum(r["Return over 1year"],1)}</td>
-        <td class="p-3 text-right">${fmtNum(r["Return over 6months"],1)}</td>
-      </tr>
-    `;
-  }).join("");
-
-  tbody.querySelectorAll("tr").forEach(tr=>{
-    tr.addEventListener("click", ()=>{
-      const name = tr.getAttribute("data-name");
-      if(companyByName.has(name)){
-        currentCompany = companyByName.get(name);
-        document.getElementById("companySelect").value = name;
-        switchTab("company");
-        renderCompany();
-      }
-    });
-  });
-}
-
-function renderCompany(){
-  const c = currentCompany;
-  if(!c){
-    document.getElementById("companyTitle").textContent = "Select a company";
-    document.getElementById("companySubtitle").textContent = "Use the dropdown or click a row in the Screener table.";
-    ["c_mc","c_pe","c_eps","c_roe","c_roce","c_peg","c_de","c_pledge","c_dy","c_mcs","c_cr","c_qr","c_cash","c_sme"].forEach(id=>document.getElementById(id).textContent="—");
-    document.getElementById("returnsTiles").innerHTML = "";
-    // Clear plots
-    ["plotSales","plotOpProfit","plotNetProfit","plotPrice","plotHoldings","plotEPS","plotYearly"].forEach(id=>{
-      Plotly.purge(id);
-      document.getElementById(id).innerHTML = "";
-    });
-    return;
-  }
-
-  document.getElementById("companyTitle").textContent = c["Name"] || "—";
-  document.getElementById("companySubtitle").textContent = c["Industry"] || "";
-
-  document.getElementById("c_mc").textContent = fmtNum(c["Market Capitalization"],0);
-  document.getElementById("c_pe").textContent = fmtNum(c["Price to Earning"],1);
-  document.getElementById("c_eps").textContent = fmtNum(c["_EPS_TTM"],2);
-  document.getElementById("c_roe").textContent = fmtPct(c["Return on equity"],1);
-  document.getElementById("c_roce").textContent = fmtPct(c["Return on capital employed"],1);
-  document.getElementById("c_peg").textContent = fmtNum(c["PEG Ratio"],2);
-
-  document.getElementById("c_de").textContent = fmtNum(c["Debt to equity"],2);
-  document.getElementById("c_pledge").textContent = fmtPct(c["Pledged percentage"],1);
-  document.getElementById("c_dy").textContent = fmtPct(c["Dividend yield"],2);
-  document.getElementById("c_mcs").textContent = fmtNum(c["Market Cap to Sales"],2);
-  document.getElementById("c_cr").textContent = fmtNum(c["Current ratio"],2);
-  document.getElementById("c_qr").textContent = fmtNum(c["Quick ratio"],2);
-  document.getElementById("c_cash").textContent = fmtNum(c["Cash Equivalents"],0);
-  document.getElementById("c_sme").textContent = (c["Is SME"]===1 ? "Yes" : (c["Is SME"]===0 ? "No" : "—"));
-
-  renderReturnsTiles(c);
-  renderCompanyCharts(c);
-}
-
-function tileClass(v){
-  if(!Number.isFinite(v)) return "bg-slate-950";
-  if(v >= 0) return "bg-emerald-700/30";
-  return "bg-rose-700/30";
-}
-
-function renderReturnsTiles(c){
-  const metric = document.getElementById("returnMetricSelect").value;
-  // show all periods, emphasize selected in label
-  const tiles = [
-    ["1D","Return over 1day"],
-    ["1W","Return over 1week"],
-    ["1M","Return over 1month"],
-    ["3M","Return over 3months"],
-    ["6M","Return over 6months"],
-    ["1Y","Return over 1year"]
-  ];
-  const wrap = document.getElementById("returnsTiles");
-  wrap.innerHTML = tiles.map(([lbl, key])=>{
-    const v = c[key];
-    const cls = tileClass(v);
-    const highlight = (key===metric) ? "ring-2 ring-slate-100" : "";
-    return `
-      <div class="tile ${cls} ${highlight}">
-        <div class="text-xs text-slate-300">${lbl}</div>
-        <div class="text-lg font-bold mt-1">${fmtPct(v,1)}</div>
+  <div class="mt-4 bg-slate-50 card rounded-2xl p-4 shadow-soft">
+    <div class="flex items-center justify-between gap-3 flex-wrap">
+      <div class="flex items-center gap-2 flex-wrap">
+        <span class="font-semibold">Filters</span>
+        <span id="countChip" class="chip px-3 py-1 rounded-full text-xs bg-white">0 companies</span>
       </div>
-    `;
-  }).join("");
-}
 
-function renderCompanyCharts(c){
-  const x = ["Q-4 (YoY)","Q-3","Q-2","Q-1","Q0 (Latest)"];
+      <div class="flex items-center gap-2 flex-wrap">
+        <select id="industrySelect" class="bg-white card rounded-xl px-3 py-2 text-sm">
+          <option value="__ALL__">All industries</option>
+        </select>
 
-  const sales = [
-    c["Sales preceding year quarter"],
-    c["Sales 3quarters back"],
-    c["Sales 2quarters back"],
-    c["Sales preceding quarter"],
-    c["Sales latest quarter"]
-  ];
+        <select id="sortSelect" class="bg-white card rounded-xl px-3 py-2 text-sm">
+          <option value="Market Capitalization">Sort: Market Cap</option>
+          <option value="Return over 1year">Sort: Return 1Y</option>
+          <option value="Return over 6months">Sort: Return 6M</option>
+          <option value="Price to Earning">Sort: P/E</option>
+          <option value="Return on equity">Sort: ROE</option>
+          <option value="Return on capital employed">Sort: ROCE</option>
+          <option value="OPM">Sort: OPM</option>
+        </select>
 
-  Plotly.newPlot("plotSales", [{
-    type:"bar",
-    x, y: sales,
-    hovertemplate:"%{x}<br>Revenue: %{y:,}<extra></extra>"
-  }], baseLayout(""), {displayModeBar:false, responsive:true});
+        <select id="returnMetricSelect" class="bg-white card rounded-xl px-3 py-2 text-sm">
+          <option value="Return over 1day">Return tiles: 1D</option>
+          <option value="Return over 1week">Return tiles: 1W</option>
+          <option value="Return over 1month">Return tiles: 1M</option>
+          <option value="Return over 3months">Return tiles: 3M</option>
+          <option value="Return over 6months">Return tiles: 6M</option>
+          <option value="Return over 1year" selected>Return tiles: 1Y</option>
+        </select>
+      </div>
+    </div>
+  </div>
 
-  const op = [
-    c["Operating profit preceding year quarter"],
-    c["Operating profit 3quarters back"],
-    c["Operating profit 2quarters back"],
-    c["Operating profit preceding quarter"],
-    c["Operating profit latest quarter"]
-  ];
+  <section id="tab-overview" class="tabSection mt-6">
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-3">
+      <div class="bg-white card rounded-2xl p-4 shadow-soft">
+        <div class="text-xs text-slate-500">Companies</div>
+        <div id="kpiCompanies" class="mt-2 text-2xl font-semibold">—</div>
+      </div>
+      <div class="bg-white card rounded-2xl p-4 shadow-soft">
+        <div class="text-xs text-slate-500">Total Market Cap</div>
+        <div id="kpiMarketCap" class="mt-2 text-2xl font-semibold">—</div>
+      </div>
+      <div class="bg-white card rounded-2xl p-4 shadow-soft">
+        <div class="text-xs text-slate-500">Median P/E</div>
+        <div id="kpiPE" class="mt-2 text-2xl font-semibold">—</div>
+      </div>
+      <div class="bg-white card rounded-2xl p-4 shadow-soft">
+        <div class="text-xs text-slate-500">Median ROE / ROCE</div>
+        <div id="kpiROE" class="mt-2 text-2xl font-semibold">—</div>
+      </div>
+    </div>
 
-  const margin = c["_OPM_Q"];
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-3 mt-3">
+      <div class="bg-white card rounded-2xl p-3 shadow-soft">
+        <div class="font-semibold mb-2">Market Cap by Industry</div>
+        <div id="plotMcIndustry" class="plot"></div>
+      </div>
+      <div class="bg-white card rounded-2xl p-3 shadow-soft">
+        <div class="font-semibold mb-2">Median 1Y Return by Industry</div>
+        <div id="plotRIndustry" class="plot"></div>
+      </div>
+    </div>
+  </section>
 
-  Plotly.newPlot("plotOpProfit", [
-    {type:"bar", x, y: op, name:"Operating Profit", hovertemplate:"%{x}<br>Op Profit: %{y:,}<extra></extra>"},
-    {type:"scatter", x, y: margin, name:"Margin %", yaxis:"y2", mode:"lines+markers",
-      hovertemplate:"%{x}<br>Margin: %{y:.1f}%<extra></extra>"}
-  ], baseLayout("", true), {displayModeBar:false, responsive:true});
+</div>
 
-  const np = [
-    c["Net Profit preceding year quarter"],
-    c["Net profit 3quarters back"],
-    c["Net profit 2quarters back"],
-    c["Net Profit preceding quarter"],
-    c["Net Profit latest quarter"]
-  ];
-
-  Plotly.newPlot("plotNetProfit", [{
-    type:"bar", x, y: np,
-    hovertemplate:"%{x}<br>Net Profit: %{y:,}<extra></extra>"
-  }], baseLayout(""), {displayModeBar:false, responsive:true});
-
-  // Stock price snapshot
-  const pxNames = ["Current Price","All-Time High","52W High","52W Low"];
-  const pxVals = [c["Current Price"], c["High price all time"], c["High price"], c["Low price"]];
-  Plotly.newPlot("plotPrice", [{
-    type:"bar",
-    orientation:"h",
-    y: pxNames,
-    x: pxVals,
-    hovertemplate:"%{y}: %{x}<extra></extra>"
-  }], baseLayout("", false, true), {displayModeBar:false, responsive:true});
-
-  // Holdings pie
-  const holdLabels = ["Promoter","FII","DII","Public"];
-  const holdVals = [c["Promoter holding"], c["FII holding"], c["DII holding"], c["Public holding"]].map(v=>Number.isFinite(v)?v:0);
-  Plotly.newPlot("plotHoldings", [{
-    type:"pie",
-    labels: holdLabels,
-    values: holdVals,
-    hole: 0.55,
-    hovertemplate:"%{label}: %{value:.1f}%<extra></extra>"
-  }], baseLayout(""), {displayModeBar:false, responsive:true});
-
-  // EPS chart
-  const eps = c["_EPS_Q"] || [null,null,null,null,null];
-  Plotly.newPlot("plotEPS", [{
-    type:"bar",
-    x, y: eps,
-    hovertemplate:"%{x}<br>EPS: %{y:.2f}<extra></extra>"
-  }], baseLayout(""), {displayModeBar:false, responsive:true});
-
-  // Yearly P&L: TTM vs FY (latest available)
-  const labels = ["TTM", "FY (last year)"];
-  const rev = [c["Sales preceding 12months"], c["Sales preceding year"]];
-  const np_ttm = c["_NP_TTM"];
-  const np_fy = c["Net Profit last year"];
-  Plotly.newPlot("plotYearly", [
-    {type:"bar", x: labels, y: rev, name:"Operating Revenue", hovertemplate:"%{x}<br>Revenue: %{y:,}<extra></extra>"},
-    {type:"bar", x: labels, y: [np_ttm, np_fy], name:"Net Profit", hovertemplate:"%{x}<br>Net Profit: %{y:,}<extra></extra>"}
-  ], baseLayout("", false), {displayModeBar:false, responsive:true});
-}
-
-function baseLayout(xTitle="", dualAxis=false, horizontal=false){
-  const gridColor = "rgba(148,163,184,.18)";
+<script>
+function baseLayout(xTitle="", dualAxis=false){
+  const gridColor = "#e2e8f0";
   const axisCommon = {
-    gridcolor: gridColor,
-    zerolinecolor: gridColor,
-    tickfont: {color:"rgba(226,232,240,.9)"},
-    title: {text: xTitle, font:{color:"rgba(226,232,240,.9)"}}
+    gridcolor:gridColor,
+    zerolinecolor:gridColor,
+    tickfont:{color:"#334155"},
+    title:{text:xTitle,font:{color:"#334155"}}
   };
   const layout = {
-    paper_bgcolor: "rgba(0,0,0,0)",
-    plot_bgcolor: "rgba(0,0,0,0)",
-    margin: {l: 50, r: 20, t: 20, b: 50},
-    font: {color:"rgba(226,232,240,.95)"},
-    xaxis: horizontal ? { ...axisCommon } : { ...axisCommon },
-    yaxis: { ...axisCommon, title:{text:"", font:{color:"rgba(226,232,240,.9)"}} },
-    legend: {orientation:"h", y:-0.15},
+    paper_bgcolor:"rgba(0,0,0,0)",
+    plot_bgcolor:"rgba(0,0,0,0)",
+    font:{color:"#334155"},
+    margin:{l:50,r:20,t:20,b:50},
+    xaxis:{...axisCommon},
+    yaxis:{...axisCommon},
+    legend:{orientation:"h",y:-0.15}
   };
   if(dualAxis){
-    layout.yaxis = { ...axisCommon, title:{text:"", font:{color:"rgba(226,232,240,.9)"}} };
-    layout.yaxis2 = { ...axisCommon, overlaying:"y", side:"right", showgrid:false, tickfont:{color:"rgba(226,232,240,.9)"} };
-  }
-  if(horizontal){
-    layout.margin = {l: 120, r: 20, t: 10, b: 30};
-    layout.xaxis = { ...axisCommon, title:{text:"", font:{color:"rgba(226,232,240,.9)"} } };
-    layout.yaxis = { ...axisCommon, title:{text:"", font:{color:"rgba(226,232,240,.9)"} } };
+    layout.yaxis2={overlaying:"y",side:"right",showgrid:false};
   }
   return layout;
 }
-
-/* =========================
-   TABS
-========================= */
-function switchTab(tab){
-  document.querySelectorAll(".tabSection").forEach(s=>s.classList.add("hidden"));
-  document.getElementById("tab-"+tab).classList.remove("hidden");
-
-  document.querySelectorAll(".tabBtn").forEach(b=>{
-    if(b.dataset.tab===tab){
-      b.classList.remove("bg-slate-900","card","hover:bg-slate-800");
-      b.classList.add("bg-slate-100","text-slate-900");
-    }else{
-      b.classList.remove("bg-slate-100","text-slate-900");
-      b.classList.add("bg-slate-900","card","hover:bg-slate-800");
-    }
-  });
-
-  // Resize plots on tab switch
-  setTimeout(()=>{
-    ["plotMcIndustry","plotRIndustry","plotScatter","plotHist","plotSales","plotOpProfit","plotNetProfit","plotPrice","plotHoldings","plotEPS","plotYearly"].forEach(id=>{
-      const el = document.getElementById(id);
-      if(el && el.data) Plotly.Plots.resize(el);
-    });
-  }, 50);
-}
-
-/* =========================
-   INIT
-========================= */
-(async ()=>{
-  try{
-    const res = await fetch("./data/latest.json?ts=" + Date.now(), {cache:"no-store"});
-    if(!res.ok) throw new Error("latest.json not found (" + res.status + ")");
-    const payload = await res.json();
-    rawRows = payload.rows || [];
-    normalizeRows();
-    bootstrapUI();
-    applyFiltersAndRender();
-    const ts = payload.updated_at || payload.updatedAt || null;
-    const lu = document.getElementById("lastUpdated");
-    if(lu) lu.textContent = ts ? ts : "—";
-    setStatus("Loaded " + rows.length.toLocaleString() + " companies. " + (ts ? ("Last updated: " + ts) : ""));
-  }catch(err){
-    console.error(err);
-    setStatus("No data loaded yet. Admin must publish data/latest.json. Error: " + err.message);
-  }
-})();
-
-// Default tab
-switchTab("overview");
 </script>
+
 </body>
 </html>
